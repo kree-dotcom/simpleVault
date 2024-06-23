@@ -4,6 +4,7 @@ use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatch
 #[starknet::interface]
 pub trait IZklendMarket<TContractState> {
     fn deposit(ref self: TContractState, token : ContractAddress, amount: felt252);
+    fn withdraw(ref self: TContractState, token : ContractAddress, amount: felt252);
 }
 
 #[starknet::interface]
@@ -97,6 +98,8 @@ mod SimpleVault {
     use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
     //use super::IERC20Dispatcher;
     //use super::IERC20DispatcherTrait;
+    use super::IZklendMarketDispatcher;
+    use super::IZklendMarketDispatcherTrait;
 
     #[storage]
     struct Storage {
@@ -167,6 +170,13 @@ mod SimpleVault {
             
             let new_total = existing_total - amount; 
             self.deposits.write(user, new_total);
+
+            //move deposit from active ZkLend market back to vault then user
+            let target_market = self.market.read();
+            let dispatcher_zklendMarket = IZklendMarketDispatcher{ contract_address : target_market } ;
+            dispatcher_zklendMarket.withdraw(target_erc20, amount.try_into().unwrap());
+
+            //if it is possible the amount sent to us is less than the amount requested need to rewrite as this would then always fail.
             dispatcher.transfer(user, amount.try_into().unwrap());
         }
 
