@@ -15,7 +15,7 @@ Planned functionality:
 - auto compounds interest
 
 
-Please note none of these contracts have been audited or tested fully, do not use in production.
+Please note none of these contracts have been audited or tested fully (or finished being written for that matter), do not use in production.
 
 Currently known deficiencies:
 - There is no function to claim STRK rewards for users nor a system to allocate these proportional to deposits.
@@ -23,4 +23,4 @@ This requires a merkle proof and an extensive accounting system that tracks user
 users who have left but were owed rewards from a past claim period.
 - The accounting system is basic and does not allocate interest received to users. It appears zTokens used by ZkLend
 are rebasing and so would need a tailored share system to correctly allocate the increased quantity to depositors.
-- 
+  
