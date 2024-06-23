@@ -2,6 +2,11 @@ use starknet::{ContractAddress, get_caller_address};
 use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
 
 #[starknet::interface]
+pub trait IZklendMarket<TContractState> {
+    fn deposit(ref self: TContractState, token : ContractAddress, amount: felt252);
+}
+
+#[starknet::interface]
 pub trait IHelloStarknet<TContractState> {
     fn increase_balance(ref self: TContractState, amount: felt252);
     fn get_balance(self: @TContractState) -> felt252;
@@ -80,6 +85,7 @@ pub trait ISimpleVault<TContractState> {
     fn constructor(ref self: TContractState, _owner : ContractAddress, _erc20 : ContractAddress);
     fn get_owner(self: @TContractState) -> ContractAddress;
     fn set_vault(ref self : TContractState, _vault : ContractAddress);
+    fn set_market(ref self : TContractState, _market : ContractAddress);
     fn deposit(ref self: TContractState, amount: u128);
     fn withdraw(ref self: TContractState, amount: u128);
 }
@@ -98,6 +104,7 @@ mod SimpleVault {
         deposits : LegacyMap::<ContractAddress, u128>,
         erc20 : ContractAddress,
         this : ContractAddress, //hack to have access to this contract's address
+        market : ContractAddress,
     }
 
     #[constructor]
@@ -112,6 +119,13 @@ mod SimpleVault {
             let caller : ContractAddress = get_caller_address();
             assert!(caller == self.owner.read(), "Only owner");
             self.this.write(_vault);
+        }
+
+        #[external(v0)]
+        fn set_market(ref self:ContractState, _market: ContractAddress){
+            let caller : ContractAddress = get_caller_address();
+            assert!(caller == self.owner.read(), "Only owner");
+            self.market.write(_market);
         }
 
         
@@ -131,7 +145,14 @@ mod SimpleVault {
             let vault = self.this.read();
             dispatcher.transferFrom(user, vault, _amount);
             self.deposits.write(user, new_total);
+            
 
+            //move deposit to active ZkLend market
+            let target_market = self.market.read();
+            let dispatcher_zklendMarket = IZklendMarketDispatcher{ contract_address : target_market } ;
+            
+            dispatcher.approve(target_market, amount.try_into().unwrap());
+            dispatcher_zklendMarket.deposit(target_erc20, amount.try_into().unwrap());
             //self.emit(DepositAction {user, amount});
         }
         #[external(v0)]
