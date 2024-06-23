@@ -18,54 +18,6 @@ use basic::IZklendMarketDispatcherTrait;
 
 use starknet::{ContractAddress, contract_address_const};
 
-//use traits::TryInto;
-
-#[test]
-fn test_get_balance() {
-    let contract = declare("HelloStarknet").unwrap();
-    let (contract_address, _ ) = contract.deploy(@array![]).unwrap();
-
-    let dispatcher = IHelloStarknetDispatcher {contract_address};
-
-    let balance = dispatcher.get_balance();
-
-    assert(balance == 0, 'Balance is wrong');
-}
-#[test]
-#[feature("safe_dispatcher")]
-fn test_increase_balance() {
-    let contract = declare("HelloStarknet").unwrap();
-    let (contract_address, _ ) = contract.deploy(@array![]).unwrap();
-
-    let dispatcher = IHelloStarknetDispatcher {contract_address};
-    let safe_dispatcher = IHelloStarknetSafeDispatcher {contract_address};
-
-    start_cheat_caller_address(contract_address, 0x1.try_into().unwrap());
-    dispatcher.increase_balance(2);
-
-    stop_cheat_caller_address(contract_address);
-    //this call should fail
-
-    match safe_dispatcher.increase_balance(2) {
-        Result::Ok(_) => panic(ArrayTrait::new()),
-        Result::Err(_) => {}
-
-    }
-
-    //now test zero input revert
-    start_cheat_caller_address(contract_address, 0x1.try_into().unwrap());
-
-    match safe_dispatcher.increase_balance(0) {
-        Result::Ok(_) => core::panic_with_felt252('Should have panicked'),
-        Result::Err(panic_data) => {
-            assert(*panic_data.at(0) == 'Amount cannot be 0', *panic_data.at(0));
-        }
-
-    }
-
-
-}
-
 #[test]
 fn test_erc20() {
     let contract = declare("MyERC20Token").unwrap();
@@ -171,6 +123,10 @@ fn test_simpleVault_Successes() {
     0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7
     >();
 
+    let zToken: ContractAddress = contract_address_const::<
+    0x01b5bd713e72fdc5d63ffd83762f81297f6175a5e0a4771cdadbc1dd5fe72cb1
+    >();
+
     let dispatcherERC20 = IMyERC20TokenDispatcher {
         contract_address: contract_address
     };
@@ -191,6 +147,7 @@ fn test_simpleVault_Successes() {
     start_cheat_caller_address(contract_address_vault, owner);
     dispatcherVault.set_vault(contract_address_vault);
     dispatcherVault.set_market(zklend_market);
+    dispatcherVault.set_zToken(zToken);
     stop_cheat_caller_address(contract_address_vault);
     
     let donor_account : ContractAddress = contract_address_const::<

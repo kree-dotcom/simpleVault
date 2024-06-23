@@ -8,32 +8,9 @@ pub trait IZklendMarket<TContractState> {
 }
 
 #[starknet::interface]
-pub trait IHelloStarknet<TContractState> {
-    fn increase_balance(ref self: TContractState, amount: felt252);
-    fn get_balance(self: @TContractState) -> felt252;
-}
-
-#[starknet::contract]
-mod HelloStarknet {
-    use core::traits::Into;
-    use starknet::{ContractAddress, get_caller_address};
-    #[storage]
-    struct Storage {
-        balance: felt252,
-    }
-
-    #[abi(embed_v0)]
-    impl HelloStarknetImpl of super::IHelloStarknet<ContractState> {
-        fn increase_balance(ref self: ContractState, amount: felt252) {
-            assert(amount != 0, 'Amount cannot be 0');
-            assert(get_caller_address().into() == 1, 'wrong address');
-            self.balance.write(self.balance.read() + amount);
-        }
-
-        fn get_balance(self: @ContractState) -> felt252 {
-            self.balance.read()
-        }
-    }
+pub trait IZToken<TContractState> {
+    fn balance_of(self: @TContractState, user: ContractAddress) -> u256;
+    fn underlying_token(self: @TContractState) -> ContractAddress;
 }
 
 #[starknet::interface]
@@ -89,6 +66,8 @@ pub trait ISimpleVault<TContractState> {
     fn set_market(ref self : TContractState, _market : ContractAddress);
     fn deposit(ref self: TContractState, amount: u128);
     fn withdraw(ref self: TContractState, amount: u128);
+    fn set_zToken(ref self: TContractState, _ztoken : ContractAddress);
+    fn check_user_balance(self: @TContractState, _user : ContractAddress) -> u256;
 }
 
 #[starknet::contract]
@@ -96,10 +75,10 @@ mod SimpleVault {
     use starknet::ContractAddress;
     use starknet::get_caller_address;
     use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
-    //use super::IERC20Dispatcher;
-    //use super::IERC20DispatcherTrait;
     use super::IZklendMarketDispatcher;
     use super::IZklendMarketDispatcherTrait;
+    use super::IZTokenDispatcher;
+    use super::IZTokenDispatcherTrait;
 
     #[storage]
     struct Storage {
@@ -107,7 +86,8 @@ mod SimpleVault {
         deposits : LegacyMap::<ContractAddress, u128>,
         erc20 : ContractAddress,
         this : ContractAddress, //hack to have access to this contract's address
-        market : ContractAddress,
+        market : ContractAddress, //zklend market we are depositing to
+        ztoken : ContractAddress, //associated zToken for the market i.e. zETH for ETH
     }
 
     #[constructor]
@@ -135,6 +115,31 @@ mod SimpleVault {
         #[external(v0)]
         fn get_owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
+        }
+
+        //this could be merged into the constructor but then non-forked tests will break until we create a mock ZToken
+        #[external(v0)]
+        fn set_zToken(ref self: ContractState, _ztoken : ContractAddress){
+            let caller : ContractAddress = get_caller_address();
+            assert!(caller == self.owner.read(), "Only owner");
+
+            //check underlying token of market matches set ERC20
+            let dispatcher = IZTokenDispatcher { contract_address : _ztoken };
+            assert!(dispatcher.underlying_token() == self.erc20.read(), "Market token must match");
+            self.ztoken.write(_ztoken);
+        }
+
+        //meaningless function, user should not have a balance directly. 
+        //will repurpose for internal accounting at some position
+        //It appears zTokens are rebasing as after depositing the user's balance grows,
+        // i.e. 1zETH = 1 ETH but the user gains more shares
+        #[external(v0)]
+        fn check_user_balance(self: @ContractState, _user : ContractAddress) -> u256 {
+            //fetch user's zToken balance from the zklend market
+            let ztoken : ContractAddress = self.ztoken.read();
+            let dispatcher = IZTokenDispatcher { contract_address : ztoken };
+
+            dispatcher.balance_of(_user)
         }
 
         #[external(v0)]
@@ -179,9 +184,6 @@ mod SimpleVault {
             //if it is possible the amount sent to us is less than the amount requested need to rewrite as this would then always fail.
             dispatcher.transfer(user, amount.try_into().unwrap());
         }
-
-        // process deposits of ETH
-        //ETH lives at 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7 and is treated like an ERC20?
 
         //process withdrawals of ETH
 
